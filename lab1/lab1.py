@@ -33,9 +33,9 @@ from tqdm import tqdm
 
 ### PARAMETERS THAT YOU CAN CHANGE FOR SECTION 8.3 ###
 
-rf_size = 5 # Receptive field size that will be provided as input to the column
+rf_size = 8 # Receptive field size that will be provided as input to the column
 num_neurons = 32 # Number of excitatory neurons in the column
-startposition = 13 # Start position of the receptive field w.r.t. top left corner of image
+startposition = 11 # Start position of the receptive field w.r.t. top left corner of image
 threshold = 32 # Firing threshold for every excitatory neuron
 timesteps = 8 # Resolution for timesteps and weights
 
@@ -50,7 +50,7 @@ class PreProcTransform:
         self.temporal_transform = utils.Intensity2Latency(timesteps) # Convert pixel values to time
                                                     # Higher value corresponds to earlier spiketime
         self.crop = utils.Crop(startposition, rf_size) # Crop the image to form the receptive field
-        
+
     def __call__(self, image):
         image = self.to_tensor(image) * 255
         image.unsqueeze_(0) # Adds a temporal dimension at the beginning
@@ -75,7 +75,6 @@ MNIST_testLoader = DataLoader(MNIST_test, batch_size=1000, shuffle=True)
 
 # In[3]:
 
-print(MNIST_train.dataset.train_data.shape)
 ### Column Definition ###
 
 class Column(nn.Module):
@@ -93,7 +92,7 @@ class Column(nn.Module):
                                        stride=1)
         # STDP module which implements the given STDP rule for the above layer (a single column in this case)
         self.stdp = snn.ModSTDP(self.ec, 10/128, 10/128, 1/128, 96/128, 4/128, maxweight = timesteps)
-        
+
     def forward(self, rec_field):
         ### Start of Excitatory Column ###
         out = self.ec(rec_field)
@@ -119,15 +118,13 @@ MyColumn = Column(num_neurons, threshold)
 ### Training a Column ###
 print(MNIST_trainLoader.dataset.dataset.train_data.shape)
 print(len(MNIST_trainLoader))
-for epochs in range(1):
+for epochs in range(6):
     start = time.time()
     cnt = 0
     for data, target in tqdm(MNIST_trainLoader):
         for i in range(len(data)):
             # pass
             # Passing data through the column
-            # print(data[i].shape)
-            # print('datai',data[i].shape)
             out = MyColumn(data[i])
             # STDP training for each input is performed here
             MyColumn.stdp(data[i],out)
@@ -153,7 +150,7 @@ for data, target in MNIST_testLoader:
         temp = torch.nonzero(out)
         if temp.size(0) != 0:
             table[temp[0][0], target[i]] += 1
-            
+
 print("Confusion Matrix:")
 print(table)
 
@@ -164,4 +161,3 @@ covg_cnt = torch.sum(totals)
 
 print("Purity: ", pred/covg_cnt)
 print("Coverage: ", covg_cnt/count)
-
