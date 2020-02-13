@@ -24,8 +24,7 @@ from SpykeTorch import utils
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-
-
+from tqdm import tqdm
 # In[2]:
 
 
@@ -118,13 +117,17 @@ MyColumn = Column(num_neurons, threshold)
 
 
 ### Training a Column ###
-
+print(MNIST_trainLoader.dataset.dataset.train_data.shape)
+print(len(MNIST_trainLoader))
 for epochs in range(1):
     start = time.time()
-    for data, target in MNIST_trainLoader:
+    cnt = 0
+    for data, target in tqdm(MNIST_trainLoader):
         for i in range(len(data)):
+            # pass
             # Passing data through the column
             # print(data[i].shape)
+            # print('datai',data[i].shape)
             out = MyColumn(data[i])
             # STDP training for each input is performed here
             MyColumn.stdp(data[i],out)

@@ -344,9 +344,22 @@ class ModSTDP(nn.Module):
     def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight):
         super(ModSTDP, self).__init__()
         # Initialize your variables here, including any Bernoulli Random Variable distributions
+        self.layer = layer
+        self.ucapture = ucapture
+        self.uminus = uminus
+        self.usearch = usearch
+        self.ubackoff = ubackoff
+        self.umin = umin
+        self.maxweight = maxweight
+        self.bmin = Bernoulli(torch.tensor([self.umin]))
+        self.bcap = Bernoulli(torch.tensor([self.ucapture]))
+        self.bminus = Bernoulli(torch.tensor([self.uminus]))
+        self.bsearch = Bernoulli(torch.tensor([self.usearch]))
+        self.bbackoff = Bernoulli(torch.tensor([self.ubackoff]))
+
+        self.fplus = lambda w:Bernoulli((w/self.maxweight) * (2 - w/self.maxweight))
+        self.fminus = lambda w:Bernoulli((1-w/self.maxweight) * (1 + w/self.maxweight))
         
-    
-    
 
 
     # forward function is called when you pass data (input and output spikes) into the already instantiated class
@@ -356,7 +369,28 @@ class ModSTDP(nn.Module):
     # This function does not need to return anything.
     
     def forward(self, input_spikes, output_spikes):
-        pass
+        time = input_spikes.shape[0]
+        in_channel = input_spikes.shape[1]
+        out_channel = output_spikes.shape[1]
+        input_size = input_spikes.shape[2]
+        input_spike_aug = torch.repeat_interleave(input_spikes.unsqueeze(1),out_channel,dim = 1)
+        output_spike_aug = torch.repeat_interleave(output_spikes.unsqueeze(2),in_channel,dim = 2).repeat(1,1,1,input_size,input_size)
+        #branch 1
+        w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
+        branch1_idx = (input_spike_aug==0) & (input_spike_aug==0) & (input_spike_aug<=output_spike_aug)
+        w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bminus.sample())
+        #branch 2
+        branch2_idx = (input_spike_aug==0) & (input_spike_aug==0) & (input_spike_aug>output_spike_aug)
+        w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bminus.sample())
+        #branch 3
+        branch3_idx = (input_spike_aug!=0) & (input_spike_aug==0) 
+        w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bminus.sample())
+        #branch 4
+        branch4_idx = (input_spike_aug==0) & (input_spike_aug!=0) 
+        w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bminus.sample())        
+        #branch 5
+        self.layer.weight = torch.clamp(w.sum(0),0,self.maxweight)
+
         # Actual training rule goes here
         # Modify the weights of the corresponding layer in place
         
