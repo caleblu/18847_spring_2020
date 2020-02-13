@@ -378,16 +378,16 @@ class ModSTDP(nn.Module):
         #branch 1
         w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
         branch1_idx = (input_spike_aug==0) & (input_spike_aug==0) & (input_spike_aug<=output_spike_aug)
-        w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bminus.sample())
+        w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
         #branch 2
         branch2_idx = (input_spike_aug==0) & (input_spike_aug==0) & (input_spike_aug>output_spike_aug)
-        w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bminus.sample())
+        w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
         #branch 3
         branch3_idx = (input_spike_aug!=0) & (input_spike_aug==0) 
-        w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bminus.sample())
+        w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
         #branch 4
         branch4_idx = (input_spike_aug==0) & (input_spike_aug!=0) 
-        w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bminus.sample())        
+        w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())        
         #branch 5
         self.layer.weight = torch.clamp(w.sum(0),0,self.maxweight)
 
