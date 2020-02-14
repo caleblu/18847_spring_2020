@@ -33,9 +33,9 @@ from tqdm import tqdm
 
 ### PARAMETERS THAT YOU CAN CHANGE FOR SECTION 8.3 ###
 
-rf_size = 8 # Receptive field size that will be provided as input to the column
+rf_size = 10 # Receptive field size that will be provided as input to the column
 num_neurons = 32 # Number of excitatory neurons in the column
-startposition = 11 # Start position of the receptive field w.r.t. top left corner of image
+startposition = 7 # Start position of the receptive field w.r.t. top left corner of image
 threshold = 32 # Firing threshold for every excitatory neuron
 timesteps = 8 # Resolution for timesteps and weights
 
@@ -130,7 +130,6 @@ for epochs in range(6):
             MyColumn.stdp(data[i],out)
     end = time.time()
     print("Training done under ", end-start)
-
 
 # In[6]:
 

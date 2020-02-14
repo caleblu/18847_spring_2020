@@ -58,6 +58,7 @@ class Convolution(nn.Module):
         self.weight = Parameter(torch.Tensor(self.out_channels, self.in_channels, *self.kernel_size))
         self.weight.requires_grad_(False) # We do not use gradients
         self.reset_weight(weight_mean, weight_std)
+        print(self.weight.shape)
 
     def reset_weight(self, weight_mean=0.8, weight_std=0.02):
         """Resets weights to random values based on a normal distribution.
@@ -290,7 +291,7 @@ class LocalConvolution(nn.Module):
         self.cols = int((self.input_size[1] - self.kernel_size[1] + 2 * self.padding)/stride) + 1
         self.weight = torch.zeros((self.out_channels, int(self.in_channels/self.groups), self.kernel_size[0], self.kernel_size[1]))
         ######################################################
-
+        # print(self.weight.shape)
         self.reset_weight()
 
     def reset_weight(self):
@@ -381,7 +382,6 @@ class ModSTDP(nn.Module):
 
 
         # print(x.shape)
-        # print(w.shape)
         # input_spike_aug = torch.repeat_interleave(input_spikes.unsqueeze(1),out_channel,dim = 1)
         # output_spike_aug = torch.repeat_interleave(output_spikes.unsqueeze(2),in_channel,dim = 2).repeat(1,1,1,input_size,input_size)
         #branch 1
@@ -397,7 +397,6 @@ class ModSTDP(nn.Module):
         w[branch4_idx] -= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())
 
         self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)
-
 
         # w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
         # branch1_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug<=output_spike_aug)
