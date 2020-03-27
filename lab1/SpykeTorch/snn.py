@@ -13,7 +13,7 @@ class Convolution(nn.Module):
     planes. Current version only supports stride of 1 with no padding.
 
     The input is a 4D tensor with the size :math:`(T, C_{{in}}, H_{{in}}, W_{{in}})` and the crresponsing output
-    is of size :math:`(T, C_{{out}}, H_{{out}}, W_{{out}})`, 
+    is of size :math:`(T, C_{{out}}, H_{{out}}, W_{{out}})`,
     where :math:`T` is the number of time steps, :math:`C` is the number of feature maps (channels), and
     :math:`H`, and :math:`W` are the hight and width of the input/output planes.
 
@@ -58,6 +58,7 @@ class Convolution(nn.Module):
         self.weight = Parameter(torch.Tensor(self.out_channels, self.in_channels, *self.kernel_size))
         self.weight.requires_grad_(False) # We do not use gradients
         self.reset_weight(weight_mean, weight_std)
+        print(self.weight.shape)
 
     def reset_weight(self, weight_mean=0.8, weight_std=0.02):
         """Resets weights to random values based on a normal distribution.
@@ -74,7 +75,7 @@ class Convolution(nn.Module):
         Args:
             target (Tensor=): The target tensor.
         """
-        self.weight.copy_(target)	
+        self.weight.copy_(target)
 
     def forward(self, input):
         return fn.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
@@ -90,7 +91,7 @@ class Pooling(nn.Module):
         in propagation of the earliest spike within each pooling window.
 
     The input is a 4D tensor with the size :math:`(T, C, H_{{in}}, W_{{in}})` and the crresponsing output
-    is of size :math:`(T, C, H_{{out}}, W_{{out}})`, 
+    is of size :math:`(T, C, H_{{out}}, W_{{out}})`,
     where :math:`T` is the number of time steps, :math:`C` is the number of feature maps (channels), and
     :math:`H`, and :math:`W` are the hight and width of the input/output planes.
 
@@ -279,29 +280,29 @@ class LocalConvolution(nn.Module):
         self.out_channels = out_channels
         self.kernel_size = to_pair(kernel_size)
         self.stride = stride
-        
+
         self.bias = None
         self.padding = 0
         self.dilation = 1
         self.groups = 1
-        
+
         ########## UNCOMMENT AND COMPLETE THIS PART ##########
         self.rows = int((self.input_size[0] - self.kernel_size[0] + 2 * self.padding)/stride) + 1
         self.cols = int((self.input_size[1] - self.kernel_size[1] + 2 * self.padding)/stride) + 1
         self.weight = torch.zeros((self.out_channels, int(self.in_channels/self.groups), self.kernel_size[0], self.kernel_size[1]))
         ######################################################
-        
+        # print(self.weight.shape)
         self.reset_weight()
-    
+
     def reset_weight(self):
         # Resets weights to zero
-        
+
         self.weight.zero_().int()
 
     def load_weight(self, target):
         # Loads weights with the target tensor
         # Args: target (Tensor=) - The target tensor
-        
+
         self.weight.copy_(target)
 
     def forward(self, input):
@@ -313,24 +314,24 @@ class LocalConvolution(nn.Module):
     # Returns: out - output potential tensor corresponding to this layer's excitatory neuron potentials after convolving the
     #                synaptic weights with the input spike wave tensor (step-no-leak response).
     #                It should be a 4D tensor with dimensions (time, out_channels, rows, cols).
-    
+
     # Since we don't use weight sharing, you have to work around the usual striding convolution essentially by manually
     # taking kernel_size patches from input and convolving it with the same size kernel. So, typically, you have to manually
     # stride across the input to create multiple columns.
-        
+
         ### *** WRITE YOUR CONVOLUTION FUNCTION HERE *** ###
         out =  fn.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
         # print(out.shape)
         # print(self.rows, self.cols)
         return out
-        
-        
-    
+
+
+
 
 
 ### This class should implement the STDP learning rule based on the decision tree branches given in your handout ###
 class ModSTDP(nn.Module):
-    
+
     # __init__ function is called when you instantiate this class.
     # Args: layer     - The layer for which this STDP classs will be instantiated.This is useful when you have deep SNNs.
     #       ucapture  - The 'capture' probability parameter
@@ -340,7 +341,7 @@ class ModSTDP(nn.Module):
     #       umin      - The 'min' probability parameter used in weight stabilization
     #       maxweight - The maximum value/resolution of weights (weights can only be integers here)
     # This function does not return anything.
-    
+
     def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight):
         super(ModSTDP, self).__init__()
         # Initialize your variables here, including any Bernoulli Random Variable distributions
@@ -359,7 +360,7 @@ class ModSTDP(nn.Module):
 
         self.fplus = lambda w:Bernoulli((w/self.maxweight) * (2 - w/self.maxweight))
         self.fminus = lambda w:Bernoulli((1-w/self.maxweight) * (1 + w/self.maxweight))
-        
+
 
 
     # forward function is called when you pass data (input and output spikes) into the already instantiated class
@@ -367,32 +368,53 @@ class ModSTDP(nn.Module):
     #                      (time,in_channels,height,width). Height and width are nothing but Receptive Field's height and width
     #       output_spikes - 4D spike wave tensor that is the output after Lateral Inhibition
     # This function does not need to return anything.
-    
+
     def forward(self, input_spikes, output_spikes):
         time = input_spikes.shape[0]
-        in_channel = input_spikes.shape[1]
         out_channel = output_spikes.shape[1]
-        input_size = input_spikes.shape[2]
-        input_spike_aug = torch.repeat_interleave(input_spikes.unsqueeze(1),out_channel,dim = 1)
-        output_spike_aug = torch.repeat_interleave(output_spikes.unsqueeze(2),in_channel,dim = 2).repeat(1,1,1,input_size,input_size)
+        wshape = self.layer.weight.shape
+
+        x = torch.sum(input_spikes.squeeze().reshape(time,-1),dim=0).reshape(1,-1).repeat(out_channel,1)
+
+        y = torch.sum(output_spikes.squeeze().reshape(time,-1),dim=0).reshape(-1,1).repeat(1,x.shape[1])
+
+        w = self.layer.weight.reshape(out_channel,-1)
+
+
+        # print(x.shape)
+        # input_spike_aug = torch.repeat_interleave(input_spikes.unsqueeze(1),out_channel,dim = 1)
+        # output_spike_aug = torch.repeat_interleave(output_spikes.unsqueeze(2),in_channel,dim = 2).repeat(1,1,1,input_size,input_size)
         #branch 1
-        w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
-        branch1_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug<=output_spike_aug)
-        w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
-        #branch 2
-        branch2_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug>output_spike_aug)
-        w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
-        #branch 3
-        branch3_idx = (input_spike_aug!=0) & (output_spike_aug==0) 
-        w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
-        #branch 4
-        branch4_idx = (input_spike_aug==0) & (output_spike_aug!=0) 
-        w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())        
-        #branch 5
-        self.layer.weight = torch.clamp(w.sum(0),0,self.maxweight)
+        branch1_idx = ((x>=y) & (x>0) & (y>0))
+        # print(branch1_idx)
+        # print(w[branch1_idx])
+        w[branch1_idx] += self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
+        branch2_idx = ((x<y) & (x>0) & (y>0) )
+        w[branch2_idx] -= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
+        branch3_idx = ((x>0) & (y==0))
+        w[branch3_idx] += self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
+        branch4_idx = ((x==0) & (y>0))
+        w[branch4_idx] -= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())
+
+        self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)
+
+        # w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
+        # branch1_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug<=output_spike_aug)
+        # w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
+        # #branch 2
+        # branch2_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug>output_spike_aug)
+        # w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
+        # #branch 3
+        # branch3_idx = (input_spike_aug!=0) & (output_spike_aug==0)
+        # w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
+        # #branch 4
+        # branch4_idx = (input_spike_aug==0) & (output_spike_aug!=0)
+        # w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())
+        # #branch 5
+        # self.layer.weight = torch.clamp(w.sum(0),0,self.maxweight)
 
         # Actual training rule goes here
         # Modify the weights of the corresponding layer in place
-        
-        
+
+
 ############# YOUR CODE ENDS HERE ##########################
