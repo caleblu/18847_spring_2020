@@ -46,14 +46,14 @@ timesteps = 8 # Resolution for timesteps and weights
 # Performs pre-processing on the input image
 class PreProcTransform:
     def __init__(self, filter, timesteps = timesteps):
-        self.to_tensor = transforms.ToTensor() # Convert to tensor
+        #self.to_tensor = transforms.ToTensor() # Convert to tensor
         #self.filter = filter # Apply OnOff filtering
         self.temporal_transform = utils.Intensity2Latency(timesteps) # Convert pixel values to time
                                                     # Higher value corresponds to earlier spiketime
         #self.crop = utils.Crop(startposition, rf_size) # Crop the image to form the receptive field
 
     def __call__(self, image):
-        image = self.to_tensor(image)
+        #image = self.to_tensor(image)
         #image = self.to_tensor(image) * 255
         image.unsqueeze_(0) # Adds a temporal dimension at the beginning
         #image = self.filter(image)
@@ -153,7 +153,7 @@ MyColumn = Column(num_neurons, threshold)
 
 
 ### Training a Column ###
-print(MNIST_trainLoader.dataset.dataset.train_data.shape)
+#print(MNIST_trainLoader.dataset.dataset.train_data.shape)
 print(len(MNIST_trainLoader))
 for epochs in range(6):
     start = time.time()
