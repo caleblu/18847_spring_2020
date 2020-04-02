@@ -10,7 +10,7 @@
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 from torchvision.datasets import ImageFolder
 from torch.nn.parameter import Parameter
 import torchvision
@@ -25,6 +25,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from tqdm import tqdm
+from simulation import  *
 # In[2]:
 
 
@@ -33,7 +34,7 @@ from tqdm import tqdm
 
 ### PARAMETERS THAT YOU CAN CHANGE FOR SECTION 8.3 ###
 
-rf_size = 10 # Receptive field size that will be provided as input to the column
+rf_size = 4 # Receptive field size that will be provided as input to the column
 num_neurons = 32 # Number of excitatory neurons in the column
 startposition = 7 # Start position of the receptive field w.r.t. top left corner of image
 threshold = 32 # Firing threshold for every excitatory neuron
@@ -46,18 +47,20 @@ timesteps = 8 # Resolution for timesteps and weights
 class PreProcTransform:
     def __init__(self, filter, timesteps = timesteps):
         self.to_tensor = transforms.ToTensor() # Convert to tensor
-        self.filter = filter # Apply OnOff filtering
+        #self.filter = filter # Apply OnOff filtering
         self.temporal_transform = utils.Intensity2Latency(timesteps) # Convert pixel values to time
                                                     # Higher value corresponds to earlier spiketime
-        self.crop = utils.Crop(startposition, rf_size) # Crop the image to form the receptive field
+        #self.crop = utils.Crop(startposition, rf_size) # Crop the image to form the receptive field
 
     def __call__(self, image):
-        image = self.to_tensor(image) * 255
+        image = self.to_tensor(image)
+        #image = self.to_tensor(image) * 255
         image.unsqueeze_(0) # Adds a temporal dimension at the beginning
-        image = self.filter(image)
+        #image = self.filter(image)
         temporal_image = self.temporal_transform(image)
         temporal_image = temporal_image.sign() # This will create spikes
-        return self.crop(temporal_image)
+        #return self.crop(temporal_image)
+        return temporal_image
 
 kernels = [utils.OnKernel(3), utils.OffKernel(3)]
 inchannels = len(kernels)
@@ -67,10 +70,44 @@ preproc = PreProcTransform(filter)
 
 # Defining iterator for loading train and test data
 data_root = "data"
-MNIST_train = utils.CacheDataset(torchvision.datasets.MNIST(root=data_root, train=True, download=True, transform = preproc))
-MNIST_test = utils.CacheDataset(torchvision.datasets.MNIST(root=data_root, train=False, download=True, transform = preproc))
-MNIST_trainLoader = DataLoader(MNIST_train, batch_size=1000, shuffle=True)
-MNIST_testLoader = DataLoader(MNIST_test, batch_size=1000, shuffle=True)
+#MNIST_train = utils.CacheDataset(torchvision.datasets.MNIST(root=data_root, train=True, download=True, transform = preproc))
+#MNIST_test = utils.CacheDataset(torchvision.datasets.MNIST(root=data_root, train=False, download=True, transform = preproc))
+
+class MyDataset(Dataset):
+    def __init__(self, data, target, transform):
+        self.data = torch.from_numpy(data).float()
+        self.target = torch.from_numpy(target).long()
+        self.transform = transform
+        
+    def __getitem__(self, index):
+        x = self.data[index]
+        y = self.target[index]
+        
+        if self.transform:
+            x = self.transform(x)
+        
+        return x, y
+    
+    def __len__(self):
+        return len(self.data)
+
+simulation = Simulation()
+corpus = Corpus()
+
+sentences = simulation.construct_sentences()
+tokens = corpus.tokenize(sentences)
+
+## array: length 3, max spike: 4
+corpus.dictionary.get_encoding(3,4)
+
+spike_data = SpikeData(tokens, sentences, corpus)
+
+spike_input, spike_output = spike_data.convert_tokens(2)
+
+my_dataset = MyDataset(data = spike_input, target = spike_output, transform = preproc)
+
+MNIST_trainLoader = DataLoader(my_dataset, batch_size=1000, shuffle=True)
+MNIST_testLoader = DataLoader(my_dataset, batch_size=1000, shuffle=True)
 
 
 # In[3]:
