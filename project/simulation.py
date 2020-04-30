@@ -4,6 +4,14 @@ from itertools import combinations_with_replacement, combinations, permutations
 import numpy as np
 
 
+def center_gaussian(i, length, nuerons):
+    return (2 * i - 3) / 2 * length / (nuerons - 2)
+
+
+def gaussian(a, x, mu, sig):
+    return a - (a * np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.))))
+
+
 class Dictionary(object):
 
     def __init__(self):
@@ -27,6 +35,19 @@ class Dictionary(object):
         self.idx2spike = np.array(
             list(set([item for sublist in comb for item in sublist
                      ]))[:len(self.word2idx)])
+        print("idx2spike: ", self.idx2spike.shape)
+        print("idx2spike: ", self.idx2spike)
+
+    def get_gaussian_encoding(self, word, neurons, spike, sig):
+        self.idx2spike = np.zeros((word, neurons))
+        for x in range(word):
+            for y in range(neurons):
+                #self.idx2spike[x,0] = spike
+                #self.idx2spike[x,neurons-1] = spike
+                self.idx2spike[x, y] = round(
+                    gaussian(spike, x, center_gaussian(y, spike, neurons), sig))
+        print("idx2spike: ", self.idx2spike.shape)
+        print("idx2spike: ", self.idx2spike)
 
 
 class SpikeData(object):
