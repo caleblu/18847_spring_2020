@@ -49,7 +49,14 @@ class Column(nn.Module):
                                         kernel_size=(1, self.k1 * self.rf_size),
                                         stride=1)
 
-        self.stdp = snn.ModSTDP(self.ec2,
+        # self.stdp = snn.ModSTDP(self.ec2,
+        #                         10 / 128,
+        #                         10 / 128,
+        #                         1 / 128,
+        #                         96 / 128,
+        #                         4 / 128,
+        #                         maxweight=timesteps)
+        self.stdp = snn.ModSTDP(self.ec,
                                 10 / 128,
                                 10 / 128,
                                 1 / 128,
@@ -57,37 +64,38 @@ class Column(nn.Module):
                                 4 / 128,
                                 maxweight=timesteps)
 
-    # def forward(self, rec_field):
-    ## One layer forward
-    #     out = self.ec(rec_field)
-    #     print(out.shape)
-    #     spike, pot = sf.fire(out, self.thresh2, True)
-    #     print(pot.shape)
-    #     winners = sf.get_k_winners(pot,
-    #                                kwta=self.kwta,
-    #                                inhibition_radius=self.inhibition_radius)
-    #     coef = torch.zeros_like(out)
-    #     coef[:, winners, :, :] = 1
-    #     return torch.mul(pot, coef).sign()
-
     def forward(self, rec_field):
-        ## 2-layer forward
-        outs = [
-            self.ec1_list[i](torch.unsqueeze(rec_field[:, :, i, :], 2))
-            for i in range(self.rf_size)
-        ]
-        # print(outs[0].shape)
-        pots = torch.cat([sf.fire(o, self.thresh1, True)[1] for o in outs],
-                         1).squeeze().unsqueeze(1).unsqueeze(1)
-        # print(pots.shape)
-        out = self.ec2(pots)
+        # One layer forward
+        out = self.ec(rec_field)
+        # print(out.shape)
         spike, pot = sf.fire(out, self.thresh2, True)
+        # print(pot.shape)
         winners = sf.get_k_winners(pot,
                                    kwta=self.kwta,
                                    inhibition_radius=self.inhibition_radius)
         coef = torch.zeros_like(out)
         coef[:, winners, :, :] = 1
         return torch.mul(pot, coef).sign()
+        return pot
+
+    # def forward(self, rec_field):
+    #     ## 2-layer forward
+    #     outs = [
+    #         self.ec1_list[i](torch.unsqueeze(rec_field[:, :, i, :], 2))
+    #         for i in range(self.rf_size)
+    #     ]
+    #     # print(outs[0].shape)
+    #     pots = torch.cat([sf.fire(o, self.thresh1, True)[1] for o in outs],
+    #                      1).squeeze().unsqueeze(1).unsqueeze(1)
+    #     # print(pots.shape)
+    #     out = self.ec2(pots)
+    #     spike, pot = sf.fire(out, self.thresh2, True)
+    #     winners = sf.get_k_winners(pot,
+    #                                kwta=self.kwta,
+    #                                inhibition_radius=self.inhibition_radius)
+    #     coef = torch.zeros_like(out)
+    #     coef[:, winners, :, :] = 1
+    #     return torch.mul(pot, coef).sign()
 
 
 class DatasetContext(Dataset):
@@ -144,4 +152,23 @@ def train_stdp(dataset_context, column, num_epochs, batch_size=1000):
         end = time.time()
     print("Training done under ", end - start)
 
-    return reuslt
+    return result.numpy()
+
+
+def infer_stdp(dataset_context, column, batch_size=1000):
+    train_loader = DataLoader(dataset_context,
+                              batch_size=batch_size,
+                              shuffle=False)
+    result = torch.zeros(dataset_context.data_size, column.k2)
+    # print(dataset_context.data_size)
+    for data in tqdm(train_loader):
+        # print(data.shape)
+        for i in range(len(data)):
+            #                 print(i)
+            out = column(data[i])
+            # print(out.shape)
+            result[i, :] = torch.sum(out.squeeze(), dim=0)
+            ## Now stdp only works for 1-layer forward in column
+    # print("Training done under ", end - start)
+
+    return result.numpy()
