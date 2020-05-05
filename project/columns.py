@@ -201,8 +201,8 @@ def train_stdp(dataset_context, column, num_epochs, batch_size=1000):
 
     return result.numpy()
 
-def train_rstdp(dataset, column1, column2, vec_length, num_epochs, R,  batch_size=1000):
-    train_loader = DataLoader(dataset,batch_size=batch_size,shuffle=True)
+def train_rstdp(dataset, column1, column2, vec_length, num_epochs, R):
+    train_loader = DataLoader(dataset,batch_size=dataset.data_size,shuffle=True)
     result = torch.zeros(num_epochs * dataset.data_size, vec_length)
     result_label = np.zeros((num_epochs * dataset.data_size))
     for epochs in range(num_epochs):
