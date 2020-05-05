@@ -13,7 +13,6 @@ def gaussian(a, x, mu, sig):
 
 
 class Dictionary(object):
-
     def __init__(self):
         self.word2idx = {}
         self.idx2word = []
@@ -51,7 +50,6 @@ class Dictionary(object):
 
 
 class SpikeData(object):
-
     def __init__(self, tokens, sentences, corpus):
         self.sentences = sentences
         self.tokens = tokens
@@ -62,6 +60,8 @@ class SpikeData(object):
     def convert_tokens(self, window_size):
         spike_input = []
         spike_output = []
+        input = []
+        output = []
         ws = 2 * window_size + 1
         for t in self.tokens:
             for i in range(self.length - ws + 1):
@@ -74,9 +74,11 @@ class SpikeData(object):
                 spike_output.append(
                     self.corpus.dictionary.idx2spike.take(t[window_size + i],
                                                           axis=0))
+                output.append(t[window_size + i])
+                input.append(np.concatenate((t[i:window_size + i],t[window_size+1+i:window_size + 1 + i +window_size])))
         spike_input = np.array(spike_input)
         spike_output = np.array(spike_output)
-        return spike_input, spike_output
+        return spike_input, input, spike_output, output
 
 
 class Corpus(object):

@@ -4,6 +4,7 @@ import torch.nn.functional as fn
 from . import functional as sf
 from torch.nn.parameter import Parameter
 from torch.distributions.bernoulli import Bernoulli
+from torch.distributions.beta import Beta
 from .utils import to_pair
 
 
@@ -332,16 +333,6 @@ class LocalConvolution(nn.Module):
 ### This class should implement the STDP learning rule based on the decision tree branches given in your handout ###
 class ModSTDP(nn.Module):
 
-    # __init__ function is called when you instantiate this class.
-    # Args: layer     - The layer for which this STDP classs will be instantiated.This is useful when you have deep SNNs.
-    #       ucapture  - The 'capture' probability parameter
-    #       uminus    - The 'minus' probability parameter
-    #       usearch   - The 'search' probability parameter
-    #       ubackoff  - The 'backoff' probability parameter
-    #       umin      - The 'min' probability parameter used in weight stabilization
-    #       maxweight - The maximum value/resolution of weights (weights can only be integers here)
-    # This function does not return anything.
-
     def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight):
         super(ModSTDP, self).__init__()
         # Initialize your variables here, including any Bernoulli Random Variable distributions
@@ -379,15 +370,7 @@ class ModSTDP(nn.Module):
         y = torch.sum(output_spikes.squeeze().reshape(time,-1),dim=0).reshape(-1,1).repeat(1,x.shape[1])
 
         w = self.layer.weight.reshape(out_channel,-1)
-
-
-        # print(x.shape)
-        # input_spike_aug = torch.repeat_interleave(input_spikes.unsqueeze(1),out_channel,dim = 1)
-        # output_spike_aug = torch.repeat_interleave(output_spikes.unsqueeze(2),in_channel,dim = 2).repeat(1,1,1,input_size,input_size)
-        #branch 1
         branch1_idx = ((x>=y) & (x>0) & (y>0))
-        # print(branch1_idx)
-        # print(w[branch1_idx])
         w[branch1_idx] += self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
         branch2_idx = ((x<y) & (x>0) & (y>0) )
         w[branch2_idx] -= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
@@ -398,23 +381,81 @@ class ModSTDP(nn.Module):
 
         self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)
 
-        # w = self.layer.weight.unsqueeze(0).repeat(time,1,1,1,1)
-        # branch1_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug<=output_spike_aug)
-        # w[branch1_idx]+= self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
-        # #branch 2
-        # branch2_idx = (input_spike_aug==0) & (output_spike_aug==0) & (input_spike_aug>output_spike_aug)
-        # w[branch2_idx]-= self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
-        # #branch 3
-        # branch3_idx = (input_spike_aug!=0) & (output_spike_aug==0)
-        # w[branch3_idx]+= self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
-        # #branch 4
-        # branch4_idx = (input_spike_aug==0) & (output_spike_aug!=0)
-        # w[branch4_idx]-= self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())
-        # #branch 5
-        # self.layer.weight = torch.clamp(w.sum(0),0,self.maxweight)
+class ModRSTDP(nn.Module):
 
-        # Actual training rule goes here
-        # Modify the weights of the corresponding layer in place
+    # __init__ function is called when you instantiate this class.
+    # Args: layer     - The layer for which this STDP classs will be instantiated.This is useful when you have deep SNNs.
+    #       ucapture  - The 'capture' probability parameter
+    #       uminus    - The 'minus' probability parameter
+    #       usearch   - The 'search' probability parameter
+    #       ubackoff  - The 'backoff' probability parameter
+    #       umin      - The 'min' probability parameter used in weight stabilization
+    #       maxweight - The maximum value/resolution of weights (weights can only be integers here)
+    # This function does not return anything.
 
+    def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight, rcon=6,rrange = 1 ):
+        super().__init__()
+        # Initialize your variables here, including any Bernoulli Random Variable distributions
+        self.layer = layer
+        self.ucapture = ucapture
+        self.uminus = uminus
+        self.usearch = usearch
+        self.ubackoff = ubackoff
+        self.umin = umin
+        self.maxweight = maxweight
+        self.rcon = rcon
+        self.rrange = rrange
+        self.bmin = Bernoulli(torch.tensor([self.umin]))
+        self.bcap = Bernoulli(torch.tensor([self.ucapture]))
+        self.bminus = Bernoulli(torch.tensor([self.uminus]))
+        self.bsearch = Bernoulli(torch.tensor([self.usearch]))
+        self.bbackoff = Bernoulli(torch.tensor([self.ubackoff]))
+
+        self.fplus = lambda w:Bernoulli((w/self.maxweight) * (2 - w/self.maxweight))
+        self.fminus = lambda w:Bernoulli((1-w/self.maxweight) * (1 + w/self.maxweight))
+        self.preward = lambda d, t: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange, min=0)
+        self.nreward = lambda d, t: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange, max=0)
+
+
+
+    # forward function is called when you pass data (input and output spikes) into the already instantiated class
+    # Args: input_spikes - 4D spike wave tensor that was input to the Excitatory neurons. Its dimensions are
+    #                      (time,in_channels,height,width). Height and width are nothing but Receptive Field's height and width
+    #       output_spikes - 4D spike wave tensor that is the output after Lateral Inhibition
+    # This function does not need to return anything.
+
+    def forward(self, input_spikes, output_spikes, expect_spikes):
+        time = input_spikes.shape[0]
+        out_channel = output_spikes.shape[1]
+        wshape = self.layer.weight.shape
+
+        x = torch.sum(input_spikes.squeeze().reshape(time,-1),dim=0).reshape(1,-1).repeat(out_channel,1)
+        y = torch.sum(output_spikes.squeeze().reshape(time,-1),dim=0).reshape(-1,1).repeat(1,x.shape[1])
+        w = self.layer.weight.reshape(out_channel,-1)
+        dw = torch.zeros(w.shape)
+
+
+        branch1_idx = ((x>=y) & (x>0) & (y>0) )
+        dw[branch1_idx] = self.bcap.sample() * torch.max(self.fplus(w[branch1_idx]).sample(),self.bmin.sample())
+        branch2_idx = ((x<y) & (x>0) & (y>0) )
+        dw[branch2_idx] = -self.bminus.sample() * torch.max(self.fminus(w[branch2_idx]).sample(),self.bmin.sample())
+        branch3_idx = ((x>0) & (y==0))
+        dw[branch3_idx] = self.bsearch.sample() * torch.max(self.fplus(w[branch3_idx]).sample(),self.bmin.sample())
+        branch4_idx = ((x==0) & (y>0))
+        dw[branch4_idx] = -self.bbackoff.sample() * torch.max(self.fminus(w[branch4_idx]).sample(),self.bmin.sample())
+
+        if expect_spikes.sum()==0:
+            w += dw
+            self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)
+            return
+
+        r = torch.sum(expect_spikes.squeeze().reshape(time,-1),dim=0).reshape(-1,1).repeat(1,x.shape[1])
+        d = r-y
+
+        dw[d>0] += self.preward(d[d>0]+time, time-d[d>0])
+        dw[d<0] += self.nreward(d[d<0]+time, time-d[d<0])
+
+        w += dw
+        self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)
 
 ############# YOUR CODE ENDS HERE ##########################
