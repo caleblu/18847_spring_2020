@@ -2,6 +2,7 @@ import itertools
 import os
 from itertools import combinations_with_replacement, combinations, permutations
 import numpy as np
+import copy
 
 
 def center_gaussian(i, length, nuerons):
@@ -106,6 +107,10 @@ class Corpus(object):
 class Simulation():
 
     def __init__(self):
+        self.sentence_order = [
+            'S1', 'S2', 'D', 'SUBJ', 'MV', 'IP', 'D1', 'LOC', 'PERIOD', 'E1',
+            'E2'
+        ]
         self.terminals = {
             'S1': ['<sos>'],
             'S2': ['<sos>'],
@@ -128,7 +133,27 @@ class Simulation():
             'E1': ['<eos>'],
             'E2': ['<eos>']
         }
+        self.special_terminals = {
+            w: self.terminals[w]
+            for w in ['S1', 'S2', 'D', 'IP', 'D1', 'LOC', 'PERIOD', 'E1', 'E2']
+        }
+        self.cat_terminals = copy.deepcopy(self.special_terminals)
+        self.cat_terminals['SUBJ'] = ['cat']
+        self.cat_terminals['MV'] = ['purrs']
+
+        self.dog_terminals = copy.deepcopy(self.special_terminals)
+        self.dog_terminals['SUBJ'] = ['dog', 'poodle']
+        self.dog_terminals['MV'] = ['barks']
 
     def construct_sentences(self):
-        combs = itertools.product(*self.terminals.values())
-        return [' '.join(s) for s in list(combs)]
+
+        def get_terminal_values(terminal):
+            return [terminal[w] for w in self.sentence_order]
+
+        combs = itertools.product(*get_terminal_values(self.terminals))
+        combs_cat = itertools.product(*get_terminal_values(self.cat_terminals))
+        combs_dog = itertools.product(*get_terminal_values(self.dog_terminals))
+
+        return [
+            ' '.join(s) for s in list(combs) + list(combs_cat) + list(combs_dog)
+        ]
