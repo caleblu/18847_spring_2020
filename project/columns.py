@@ -15,32 +15,40 @@ from tqdm import tqdm
 
 
 class Column(nn.Module):
-    def __init__(self,
-                 k,                 #number of output channels 
-                 threshold,         
-                 kwta,  
-                 inhibition_radius,
-                 rf_size,           #number of context words
-                 length,            #length of 1st layer encoding = number of output channels
-                 timesteps,         
-                 inchannels=1):
-        
+
+    def __init__(
+            self,
+            k,  #number of output channels 
+            threshold,
+            kwta,
+            inhibition_radius,
+            rf_size,  #number of context words
+            length,  #length of 1st layer encoding = number of output channels
+            timesteps,
+            inchannels=1):
+
         super(Column, self).__init__()
         self.k = k
         self.thresh = threshold
         self.kwta = kwta
         self.inhibition_radius = inhibition_radius
-        self.ec = snn.LocalConvolution(input_size=(rf_size,length),
+        self.ec = snn.LocalConvolution(input_size=(rf_size, length),
                                        in_channels=inchannels,
                                        out_channels=self.k,
                                        kernel_size=(length, rf_size),
                                        stride=1)
-        self.rstdp = snn.ModRSTDP(self.ec, 10/128, 10/128, 1/128, 96/128, 4/128, maxweight = timesteps)
+        self.rstdp = snn.ModRSTDP(self.ec,
+                                  10 / 128,
+                                  10 / 128,
+                                  1 / 128,
+                                  96 / 128,
+                                  4 / 128,
+                                  maxweight=timesteps)
 
     def forward(self, rec_field):
         ###############################################################################
         #output = Column(rec_field)
-        #input: 
+        #input:
         #       rec_field: first-layer output       [timesteps, 1, k, rf_size]
         #output:
         #       center word representation          [timesteps, k, 1, 1]
@@ -48,22 +56,26 @@ class Column(nn.Module):
         #output size: (timesteps, k, 1, 1)
         out = self.ec(rec_field)
         spike, pot = sf.fire(out, self.thresh, True)
-        winners = sf.get_k_winners(pot, kwta = self.kwta, inhibition_radius = self.inhibition_radius)
+        winners = sf.get_k_winners(pot,
+                                   kwta=self.kwta,
+                                   inhibition_radius=self.inhibition_radius)
         coef = torch.zeros_like(out)
-        coef[:,winners,:,:] = 1
-        return torch.mul(pot, coef).sign()      
+        coef[:, winners, :, :] = 1
+        return torch.mul(pot, coef).sign()
 
 
 class Column1(nn.Module):
-    def __init__(self,
-                 k,                 #number of output channels  = length of the encoding
-                 threshold,         
-                 kwta,
-                 inhibition_radius,
-                 rf_size,           #number of context words
-                 length,            #length of the first layer fixed input encoding
-                 timesteps,
-                 inchannels=1):
+
+    def __init__(
+            self,
+            k,  #number of output channels  = length of the encoding
+            threshold,
+            kwta,
+            inhibition_radius,
+            rf_size,  #number of context words
+            length,  #length of the first layer fixed input encoding
+            timesteps,
+            inchannels=1):
         super(Column1, self).__init__()
         self.k = k
         self.thresh = threshold
@@ -78,20 +90,20 @@ class Column1(nn.Module):
                                  kernel_size=(1, length),
                                  stride=1) for _ in range(rf_size)
         ]
-
-
-        self.rstdp_list = [snn.ModRSTDP(self.ec_list[i],
-                                8 / 32,
-                                8 / 32,
-                                1 / 32,
-                                30 / 32,
-                                2 / 32,
-                                maxweight=timesteps) for i in range(rf_size)]
+        self.rstdp_list = [
+            snn.ModRSTDP(self.ec_list[i],
+                         8 / 32,
+                         8 / 32,
+                         1 / 32,
+                         30 / 32,
+                         2 / 32,
+                         maxweight=timesteps) for i in range(rf_size)
+        ]
 
     def forward(self, rec_field, reward):
         ###############################################################################
         #output = Column1(rec_field, reward)
-        #input: 
+        #input:
         #       rec_field: fixed input encoding     [timesteps, 1, rf_size, length]
         #       reward: context word reward         [timesteps, k, rf_size]
         #output:
@@ -102,26 +114,35 @@ class Column1(nn.Module):
             for i in range(self.rf_size)
         ]
 
-        pots = [sf.fire(o, self.thresh, True)[1] for o in outs] 
-        
+        pots = [sf.fire(o, self.thresh, True)[1] for o in outs]
+
         #kwta
-        winners = [sf.get_k_winners(pot, kwta = self.kwta, inhibition_radius = self.inhibition_radius) for pot in pots]
+        winners = [
+            sf.get_k_winners(pot,
+                             kwta=self.kwta,
+                             inhibition_radius=self.inhibition_radius)
+            for pot in pots
+        ]
         coefs = [torch.zeros_like(out) for out in outs]
         for i in range(self.rf_size):
-            coefs[i][:,winners[i],:,:] = 1
-        pots = [torch.mul(pots[i], coefs[i]).sign() for i in range(self.rf_size)]
-        pots = torch.cat(pots,2).squeeze().unsqueeze(1)
-        
+            coefs[i][:, winners[i], :, :] = 1
+        pots = [
+            torch.mul(pots[i], coefs[i]).sign() for i in range(self.rf_size)
+        ]
+        pots = torch.cat(pots, 2).squeeze().unsqueeze(1)
+
         #feedback
         for i in range(self.rf_size):
-            self.rstdp_list[i](torch.unsqueeze(rec_field[:, :, i, :], 2), pots[:,:,:,i].squeeze(),reward[:,:,i].squeeze())
-            
+            self.rstdp_list[i](torch.unsqueeze(rec_field[:, :, i, :],
+                                               2), pots[:, :, :, i].squeeze(),
+                               reward[:, :, i].squeeze())
+
         return pots
 
 
 ##############################################################
 # word                  'dog'
-# index                 3 
+# index                 3
 # encode                [1 x length]
 # temperol spikes       [timesteps x length] --> {0,1}
 # SynDataset.__getitem__(i)
@@ -131,15 +152,18 @@ class Column1(nn.Module):
 #           c_word_index:    center word index
 ##############################################################
 
+
 class SynDataset(Dataset):
-    def __init__(self,
-                 corpus,
-                 spike_input,   #the encoding of the context words for all the moving windows. [#windows x #context words (rf_field) x length]
-                 input,         #the index of the context words for all the moving windows  [#windows x #context words (rf_field)]
-                 output,        #the index of the center word for all the moving windows  [#windows]
-                 timesteps,
-                 words = None,  # an array of words as center words if set, select windows with center words in 'words'
-                 transform=None):
+
+    def __init__(
+            self,
+            corpus,
+            spike_input,  #the encoding of the context words for all the moving windows. [#windows x #context words (rf_field) x length]
+            input,  #the index of the context words for all the moving windows  [#windows x #context words (rf_field)]
+            output,  #the index of the center word for all the moving windows  [#windows]
+            timesteps,
+            words=None,  # an array of words as center words if set, select windows with center words in 'words'
+            transform=None):
 
         self.corpus = corpus
         self.spike_input = spike_input
@@ -166,15 +190,17 @@ class SynDataset(Dataset):
 
     def get_context(self, word):
         idx = self.corpus.dictionary.word2idx[word]
-        ind = np.argwhere(self.output == idx)[:,0]
-        context_spike = self.spike_input[ind,:,:]
-        context_v = self.input[ind,:]
+        ind = np.argwhere(self.output == idx)[:, 0]
+        context_spike = self.spike_input[ind, :, :]
+        context_v = self.input[ind, :]
         out_v = self.output[ind]
         return context_spike, context_v, out_v
 
     def __getitem__(self, index):
         context = torch.from_numpy(self.spike_input[index, :, :])
-        return self.temporal_transform(context).sign().unsqueeze(1), self.input[index], self.output[index]
+        return self.temporal_transform(context).sign().unsqueeze(
+            1), self.input[index], self.output[index]
+
 
 ##############################################################
 # input:
@@ -190,29 +216,37 @@ class SynDataset(Dataset):
 #           R:    updated learned representation [timesteps,  k,  vocabulary size] (only those words in result_label are updated)
 ##############################################################
 
+
 def train_rstdp(dataset, column1, column2, vec_length, num_epochs, R):
-    train_loader = DataLoader(dataset,batch_size=dataset.data_size,shuffle=True)
+    train_loader = DataLoader(dataset,
+                              batch_size=dataset.data_size,
+                              shuffle=True)
     result = torch.zeros(num_epochs * dataset.data_size, vec_length)
     result_label = np.zeros((num_epochs * dataset.data_size))
     for epochs in range(num_epochs):
         start = time.time()
         cnt = 0
-        for input_temp, input_r,  output_r in tqdm(train_loader):
+        for input_temp, input_r, output_r in tqdm(train_loader):
+            input_r = input_r.type(torch.int64)
+            output_r = output_r.type(torch.int64)
             for i in range(len(input_temp)):
                 #first layer and feedback R[context_words]
-                out = column1(input_temp[i], R[:,:,input_r[i]])
+                #print(input_r[i], output_r[i])
+                out = column1(input_temp[i], R[:, :, input_r[i]])
                 #second layer
                 out2 = column2(out)
                 #second layer feedback R[center_word]
-                column2.rstdp(out, out2, R[:,:,output_r[i]])
+                column2.rstdp(out, out2, R[:, :, output_r[i]])
                 #update R[center_word]
-                R[:,:,output_r[i]] = out2.squeeze()
+                R[:, :, output_r[i]] = out2.squeeze()
                 #record second layer output and the corresponding center word index
-                result[epochs * dataset.data_size + i, :] = torch.sum(out2.squeeze(), dim=0)
+                result[epochs * dataset.data_size + i, :] = torch.sum(
+                    out2.squeeze(), dim=0)
                 result_label[epochs * dataset.data_size + i] = output_r[i]
         end = time.time()
     print("Training done under ", end - start)
     return result.numpy(), result_label, R
+
 
 # class DatasetContext(Dataset):
 #     def __init__(self,
@@ -245,9 +279,6 @@ def train_rstdp(dataset, column1, column2, vec_length, num_epochs, R):
 #     def __getitem__(self, index):
 #         context = torch.unsqueeze(self.data[:, index, :, :], 1)
 #         return context
-
-
-
 
 
 # def train_stdp(dataset_context, column, num_epochs, batch_size=1000):
