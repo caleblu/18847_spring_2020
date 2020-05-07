@@ -5,12 +5,13 @@ import numpy as np
 
 
 def center_gaussian(i, length, nuerons):
-    return (2 * i - 3) / 2 * length / (nuerons - 2)
+    return 1 + (2 * i - 3) / 2 * length / (nuerons - 2)
 
+def width_gaussian(lamb, length, neurons):
+    return 1/lamb * length / (neurons - 2)
 
 def gaussian(a, x, mu, sig):
     return a - (a * np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.))))
-
 
 class Dictionary(object):
     def __init__(self):
@@ -44,7 +45,7 @@ class Dictionary(object):
                 #self.idx2spike[x,0] = spike
                 #self.idx2spike[x,neurons-1] = spike
                 self.idx2spike[x, y] = round(
-                    gaussian(spike, x, center_gaussian(y, spike, neurons), sig))
+                    gaussian(spike, x, center_gaussian(y, spike, neurons), width_gaussian(sig, spike, neurons)))
         print("idx2spike: ", self.idx2spike.shape)
         print("idx2spike: ", self.idx2spike)
 
