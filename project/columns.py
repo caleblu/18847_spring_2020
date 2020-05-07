@@ -33,7 +33,7 @@ class Column(nn.Module):
         self.ec = snn.LocalConvolution(input_size=(rf_size,length),
                                        in_channels=inchannels,
                                        out_channels=self.k,
-                                       kernel_size=(rf_size,length),
+                                       kernel_size=(length, rf_size),
                                        stride=1)
         self.rstdp = snn.ModRSTDP(self.ec, 10/128, 10/128, 1/128, 96/128, 4/128, maxweight = timesteps)
 
