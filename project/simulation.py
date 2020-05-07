@@ -6,7 +6,11 @@ import copy
 
 
 def center_gaussian(i, length, nuerons):
-    return (2 * i - 3) / 2 * length / (nuerons - 2)
+    return (2 * i - 3) / 2 * (length - 1) / (nuerons - 2)
+
+
+def width_gaussian(lamb, length, neurons):
+    return 1 / lamb * (length - 1) / (neurons - 2)
 
 
 def gaussian(a, x, mu, sig):
@@ -14,6 +18,7 @@ def gaussian(a, x, mu, sig):
 
 
 class Dictionary(object):
+
     def __init__(self):
         self.word2idx = {}
         self.idx2word = []
@@ -45,12 +50,15 @@ class Dictionary(object):
                 #self.idx2spike[x,0] = spike
                 #self.idx2spike[x,neurons-1] = spike
                 self.idx2spike[x, y] = round(
-                    gaussian(spike, x, center_gaussian(y, spike, neurons), sig))
+                    gaussian(spike, x, center_gaussian(y, word, neurons),
+                             width_gaussian(sig, word, neurons)))
+        np.random.shuffle(self.idx2spike)
         print("idx2spike: ", self.idx2spike.shape)
         print("idx2spike: ", self.idx2spike)
 
 
 class SpikeData(object):
+
     def __init__(self, tokens, sentences, corpus):
         self.sentences = sentences
         self.tokens = tokens
@@ -76,7 +84,10 @@ class SpikeData(object):
                     self.corpus.dictionary.idx2spike.take(t[window_size + i],
                                                           axis=0))
                 output.append(t[window_size + i])
-                input.append(np.concatenate((t[i:window_size + i],t[window_size+1+i:window_size + 1 + i +window_size])))
+                input.append(
+                    np.concatenate((t[i:window_size + i],
+                                    t[window_size + 1 + i:window_size + 1 + i +
+                                      window_size])))
         spike_input = np.array(spike_input)
         spike_output = np.array(spike_output)
         return spike_input, input, spike_output, output
