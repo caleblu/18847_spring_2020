@@ -393,7 +393,7 @@ class ModRSTDP(nn.Module):
     #       maxweight - The maximum value/resolution of weights (weights can only be integers here)
     # This function does not return anything.
 
-    def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight, rcon=6,rrange = 1 ):
+    def __init__(self, layer, ucapture, uminus, usearch, ubackoff, umin, maxweight, rcon=6,rrange = 0.5 ):
         super().__init__()
         # Initialize your variables here, including any Bernoulli Random Variable distributions
         self.layer = layer
@@ -413,8 +413,8 @@ class ModRSTDP(nn.Module):
 
         self.fplus = lambda w:Bernoulli((w/self.maxweight) * (2 - w/self.maxweight))
         self.fminus = lambda w:Bernoulli((1-w/self.maxweight) * (1 + w/self.maxweight))
-        self.preward = lambda d, t: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange, min=0)
-        self.nreward = lambda d, t: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange, max=0)
+        self.preward = lambda d, t, w: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange*w*(self.maxweight-w), min=0)
+        self.nreward = lambda d, t, w: torch.clamp((Beta(self.rcon* d, self.rcon* t).sample()-0.5)*self.rrange*w*(self.maxweight-w),max=0)
 
 
 
@@ -452,8 +452,8 @@ class ModRSTDP(nn.Module):
         r = torch.sum(expect_spikes.squeeze().reshape(time,-1),dim=0).reshape(-1,1).repeat(1,x.shape[1])
         d = r-y
 
-        dw[d>0] += self.preward(d[d>0]+time, time-d[d>0])
-        dw[d<0] += self.nreward(d[d<0]+time, time-d[d<0])
+        dw[d>0] += self.preward(d[d>0]+time, time-d[d>0], w[d>0])
+        dw[d<0] += self.nreward(d[d<0]+time, time-d[d<0], w[d<0])
 
         w += dw
         self.layer.weight = torch.clamp(w.reshape(wshape),0,self.maxweight)

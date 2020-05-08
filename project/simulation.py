@@ -43,15 +43,15 @@ class Dictionary(object):
         print("idx2spike: ", self.idx2spike.shape)
         print("idx2spike: ", self.idx2spike)
 
-    def get_gaussian_encoding(self, word, neurons, spike, sig):
-        self.idx2spike = np.zeros((word, neurons))
-        for x in range(word):
+    def get_gaussian_encoding(self, neurons, spike, sig):
+        self.idx2spike = np.zeros((len(self.idx2word), neurons))
+        for x in range(len(self.idx2word)):
             for y in range(neurons):
                 #self.idx2spike[x,0] = spike
                 #self.idx2spike[x,neurons-1] = spike
                 self.idx2spike[x, y] = round(
-                    gaussian(spike, x, center_gaussian(y, word, neurons),
-                             width_gaussian(sig, word, neurons)))
+                    gaussian(spike, x, center_gaussian(y, len(self.idx2word), neurons),
+                             width_gaussian(sig, len(self.idx2word), neurons)))
         np.random.shuffle(self.idx2spike)
         print("idx2spike: ", self.idx2spike.shape)
         print("idx2spike: ", self.idx2spike)
@@ -129,19 +129,30 @@ class Simulation():
             'S2': ['<sos>'],
             'D': ['the'],
             'SUBJ': [
-                'cat', 'dog', 'cow', 'sheep', 'goat', 'pig', 'duck', 'chicken',
-                'bird', 'poodle'
+                'cat', 'dog', 'cow', 'sheep', 'goat', 'pig', 'duck', 'chicken'
             ],
             'MV': [
-                'sits', 'eats', 'drinks', 'rests', 'sleeps', 'laughs', 'plays',
-                'is', 'lives', 'waits'
+                'sits', 'eats','drinks', 'rests', 'sleeps', 'laughs'
             ],
-            'IP': ['on', 'by', 'near', 'behind'],
+            'IP': ['on', 'by'],
             'D1': ['the'],
             'LOC': [
-                'table', 'chair', 'sofa', 'mat', 'tv', 'dresser', 'shelf',
-                'couch', 'desk', 'lamp', 'computer', 'keyboards'
+                'table', 'chair','sofa', 'mat'
             ],
+#             'SUBJ': [
+#                 'cat', 'dog', 'cow', 'sheep', 'goat', 'pig', 'duck', 'chicken',
+#                 'bird', 'poodle'
+#             ],hr
+#             'MV': [
+#                 'sits', 'eats', 'drinks', 'rests', 'sleeps', 'laughs', 'plays',
+#                 'is', 'lives', 'waits'
+#             ],
+#             'IP': ['on', 'by', 'near', 'behind'],
+#             'D1': ['the'],
+#             'LOC': [
+#                 'table', 'chair', 'sofa', 'mat', 'tv', 'dresser', 'shelf',
+#                 'couch', 'desk', 'lamp', 'computer', 'keyboards'
+#             ],
             'PERIOD': ['.'],
             'E1': ['<eos>'],
             'E2': ['<eos>']

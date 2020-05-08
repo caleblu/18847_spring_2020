@@ -37,11 +37,12 @@ class Column(nn.Module):
                                        out_channels=self.k,
                                        kernel_size=(length, rf_size),
                                        stride=1)
+        #ucapture, uminus, usearch, ubackoff, umin, maxweight
         self.rstdp = snn.ModRSTDP(self.ec,
-                                  10 / 128,
-                                  10 / 128,
-                                  1 / 128,
-                                  96 / 128,
+                                  4 / 128,
+                                  4 / 128,
+                                  2 / 128,
+                                  94 / 128,
                                   4 / 128,
                                   maxweight=timesteps)
 
@@ -92,11 +93,11 @@ class Column1(nn.Module):
         ]
         self.rstdp_list = [
             snn.ModRSTDP(self.ec_list[i],
-                         8 / 32,
-                         8 / 32,
-                         1 / 32,
-                         30 / 32,
-                         2 / 32,
+                         10 / 128,
+                         9 / 128,
+                         4 / 128,
+                         100 / 128,
+                         4 / 128,
                          maxweight=timesteps) for i in range(rf_size)
         ]
 
@@ -232,16 +233,17 @@ def train_rstdp(dataset, column1, column2, vec_length, num_epochs, R):
             for i in range(len(input_temp)):
                 #first layer and feedback R[context_words]
                 #print(input_r[i], output_r[i])
-                out = column1(input_temp[i], R[:, :, input_r[i]])
-                #second layer
-                out2 = column2(out)
-                #second layer feedback R[center_word]
-                column2.rstdp(out, out2, R[:, :, output_r[i]])
-                #update R[center_word]
-                R[:, :, output_r[i]] = out2.squeeze()
-                #record second layer output and the corresponding center word index
-                result[epochs * dataset.data_size + i, :] = torch.sum(
-                    out2.squeeze(), dim=0)
+                for j in range(5):
+                    out = column1(input_temp[i], R[:, :, input_r[i]])
+                    #second layer
+                    out2 = column2(out)
+                    #second layer feedback R[center_word]
+                    column2.rstdp(out, out2, R[:, :, output_r[i]])
+                    #update R[center_word]
+                    R[:, :, output_r[i]] = out2.squeeze()
+                    #record second layer output and the corresponding center word index
+                    result[epochs * dataset.data_size + i, :] = torch.sum(
+                        out2.squeeze(), dim=0)
                 result_label[epochs * dataset.data_size + i] = output_r[i]
         end = time.time()
     print("Training done under ", end - start)
